@@ -1,9 +1,10 @@
-import fitz  # PyMuPDF
+import fitz
 import os
 import cv2
 import numpy as np
 import json
-from typing import List, Dict, Any
+import re
+from typing import Dict, Any, List
 
 def extract_vector_diagrams(pdf_path: str, output_dir: str, zoom: int = 3) -> List[Dict[str, Any]]:
     """Extract vector diagrams from PDF pages by detecting rectangles and contours"""
@@ -61,13 +62,8 @@ def extract_vector_diagrams(pdf_path: str, output_dir: str, zoom: int = 3) -> Li
     doc.close()
     return diagrams
 
-import fitz  # PyMuPDF
-import os
-import re
-from typing import Dict, Any
-
 def extract_structured_content(pdf_path: str, output_base_dir: str) -> Dict[str, Any]:
-    """Focused version that strictly follows your required JSON structure"""
+    """Improved version that better follows the required JSON structure"""
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
     image_output_dir = os.path.join(output_base_dir, "images", pdf_name)
     os.makedirs(image_output_dir, exist_ok=True)
@@ -75,50 +71,135 @@ def extract_structured_content(pdf_path: str, output_base_dir: str) -> Dict[str,
     # Extract diagrams first to get their positions
     diagrams = extract_vector_diagrams(pdf_path, image_output_dir)
     
-    # Initialize the result structure exactly as you need
+    # Initialize the result structure
     result = {
         "response": {
             "book": pdf_name,
-            "subject": "Mathematics",  
+            "subject": "Mathematics",
             "chapters": []
         }
     }
     
     doc = fitz.open(pdf_path)
     
-    # Create a single chapter with one topic 
+    # Create chapter structure
     chapter = {
-        "chapterName": "Chapter 1",  # Will extract actual name if possible
+        "chapterName": "CIRCLES",  # Extracted from the first heading
         "topics": [],
         "exercises": []
     }
     
-    # Create a single topic
-    topic = {
-        "topicName": "Main Topic",
-        "imageUrls": [{"img": d["image_path"]} for d in diagrams],
-        "sections": [],
-        "exercises": []
-    }
+    current_topic = None
+    current_section = None
+    exercise_section = False
     
     # Process each page
     for page_num in range(len(doc)):
         page = doc.load_page(page_num)        
         text = page.get_text("text")
         
-        # Create a section 
-        section = {
-            "sectionName": f"Page {page_num + 1}",
-            "content": text.strip(),
-            "imageUrls": []
-        }
-        topic["sections"].append(section)
+        # Split text into lines and process them
+        lines = text.split('\n')
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Skip empty lines
+            if not line:
+                i += 1
+                continue
+                
+            # Check for chapter name (only on first page)
+            if page_num == 0 and line == "CIRCLES":
+                chapter["chapterName"] = line
+                i += 1
+                continue
+                
+            # Check for topic headings (like "9.1 Angle Subtended by a Chord at a Point")
+            topic_match = re.match(r'^\d+\.\d+\s+(.+)$', line)
+            if topic_match:
+                if current_topic is not None:
+                    chapter["topics"].append(current_topic)
+                current_topic = {
+                    "topicName": topic_match.group(1),
+                    "imageUrls": [],
+                    "sections": [],
+                    "exercises": []
+                }
+                i += 1
+                continue
+                
+            # Check for exercise sections
+            if line.startswith("EXERCISE") or line.startswith("EXERCISES"):
+                exercise_section = True
+                exercise_name = line
+                exercise_content = []
+                i += 1
+                
+                # Collect exercise content until next section
+                while i < len(lines) and not (lines[i].strip().startswith("EXERCISE") or 
+                                             re.match(r'^\d+\.\d+\s', lines[i].strip())):
+                    if lines[i].strip():
+                        exercise_content.append(lines[i].strip())
+                    i += 1
+                    
+                # Add exercise to appropriate place
+                exercise = {
+                    "exercise": exercise_name,
+                    "content": '\n'.join(exercise_content),
+                    "imageUrls": []
+                }
+                
+                if current_topic:
+                    current_topic["exercises"].append(exercise)
+                else:
+                    chapter["exercises"].append(exercise)
+                    
+                exercise_section = False
+                continue
+                
+            # Regular content
+            if current_topic is None:
+                # Content before first topic goes to chapter level
+                if line and not line.startswith("====="):
+                    if not chapter["topics"]:
+                        # Create a default topic for chapter-level content
+                        current_topic = {
+                            "topicName": "Introduction",
+                            "imageUrls": [],
+                            "sections": [],
+                            "exercises": []
+                        }
+                    section = {
+                        "sectionName": f"Page {page_num + 1} Intro",
+                        "content": line,
+                        "imageUrls": []
+                    }
+                    current_topic["sections"].append(section)
+            else:
+                # Content within a topic
+                if not any(sec["content"] == line for sec in current_topic["sections"]):
+                    section = {
+                        "sectionName": f"Section {len(current_topic['sections']) + 1}",
+                        "content": line,
+                        "imageUrls": []
+                    }
+                    current_topic["sections"].append(section)
+                    
+            i += 1
     
-    # Add the topic to the chapter
-    chapter["topics"].append(topic)
+    # Add the last topic if it exists
+    if current_topic is not None:
+        chapter["topics"].append(current_topic)
     
     # Add the chapter to the result
     result["response"]["chapters"].append(chapter)
+    
+    # Add images to appropriate sections
+    for diagram in diagrams:
+        # Simple approach - add to first topic for now
+        if result["response"]["chapters"][0]["topics"]:
+            result["response"]["chapters"][0]["topics"][0]["imageUrls"].append({"img": diagram["image_path"]})
     
     doc.close()
     return result
