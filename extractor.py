@@ -61,8 +61,13 @@ def extract_vector_diagrams(pdf_path: str, output_dir: str, zoom: int = 3) -> Li
     doc.close()
     return diagrams
 
+import fitz  # PyMuPDF
+import os
+import re
+from typing import Dict, Any
+
 def extract_structured_content(pdf_path: str, output_base_dir: str) -> Dict[str, Any]:
-    """Extract text and diagrams with proper document structure"""
+    """Focused version that strictly follows your required JSON structure"""
     pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
     image_output_dir = os.path.join(output_base_dir, "images", pdf_name)
     os.makedirs(image_output_dir, exist_ok=True)
@@ -70,67 +75,50 @@ def extract_structured_content(pdf_path: str, output_base_dir: str) -> Dict[str,
     # Extract diagrams first to get their positions
     diagrams = extract_vector_diagrams(pdf_path, image_output_dir)
     
-    doc = fitz.open(pdf_path)
+    # Initialize the result structure exactly as you need
     result = {
         "response": {
             "book": pdf_name,
-            "subject": None,
+            "subject": "Mathematics",  # Can be parameterized
             "chapters": []
         }
     }
     
-    current_chapter = {
-        "chapterName": "Chapter 1",
+    doc = fitz.open(pdf_path)
+    
+    # Create a single chapter with one topic as per your example
+    chapter = {
+        "chapterName": "Chapter 1",  # Will extract actual name if possible
         "topics": [],
         "exercises": []
     }
     
-    # Organize diagrams by page
-    diagrams_by_page = {}
-    for diagram in diagrams:
-        page_num = diagram["page"]
-        if page_num not in diagrams_by_page:
-            diagrams_by_page[page_num] = []
-        diagrams_by_page[page_num].append(diagram)
-    
-    # Process each page for text and match with diagrams
-    for page_num in range(len(doc)):
-        page = doc.load_page(page_num)
-        page_diagrams = diagrams_by_page.get(page_num + 1, [])
-        
-        # Extract text blocks with their positions
-        text_blocks = page.get_text("blocks")
-        
-        # Create sections based on text blocks and diagram positions
-        sections = []
-        current_section = {
-            "sectionName": f"Page {page_num + 1}",
-            "content": "",
-            "imageUrls": []
-        }
-        
-        for block in text_blocks:
-            x0, y0, x1, y1, text, block_no, block_type = block
-            
-            # Check if there's a diagram in this text block area
-            for diagram in page_diagrams:
-                if (diagram["y"] >= y0 and diagram["y"] + diagram["height"] <= y1):
-                    current_section["imageUrls"].append({"img": diagram["image_path"]})
-            
-            current_section["content"] += text + "\n"
-        
-        sections.append(current_section)
-    
-    # Create topic with all sections
+    # Create a single topic
     topic = {
-        "topicName": "Main Content",
+        "topicName": "Main Topic",
         "imageUrls": [{"img": d["image_path"]} for d in diagrams],
-        "sections": sections,
+        "sections": [],
         "exercises": []
     }
     
-    current_chapter["topics"].append(topic)
-    result["response"]["chapters"].append(current_chapter)
+    # Process each page
+    for page_num in range(len(doc)):
+        page = doc.load_page(page_num)        
+        text = page.get_text("text")
+        
+        # Create a section for each page (simple approach)
+        section = {
+            "sectionName": f"Page {page_num + 1}",
+            "content": text.strip(),
+            "imageUrls": []
+        }
+        topic["sections"].append(section)
+    
+    # Add the topic to the chapter
+    chapter["topics"].append(topic)
+    
+    # Add the chapter to the result
+    result["response"]["chapters"].append(chapter)
     
     doc.close()
     return result
