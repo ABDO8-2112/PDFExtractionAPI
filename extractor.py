@@ -6,6 +6,7 @@ import json
 import re
 from typing import Dict, Any, List
 
+
 def extract_vector_diagrams(pdf_path: str, output_dir: str, zoom: int = 3) -> List[Dict[str, Any]]:
     """Extract vector diagrams from PDF pages by detecting rectangles and contours"""
     doc = fitz.open(pdf_path)
@@ -218,3 +219,4 @@ def _add_exercise(parent: Dict[str, Any], exercise: Dict[str, Any], content: str
         parent["exercises"].append(exercise)
     else:
         parent["exercises"] = [exercise]
+

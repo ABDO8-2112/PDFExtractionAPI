@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 import os
 from extractor import extract_structured_content
+from helpers import save_json_to_mysql
 
 app = Flask(__name__)
 
@@ -37,6 +38,13 @@ def upload_pdf():
         # Extract only vector graphics (diagrams, lines, shapes)
         image_urls = extract_structured_content(pdf_path = file_path, output_base_dir=app.config['IMAGE_FOLDER'])
 
+        save_json_to_mysql(
+        data=image_urls,
+        host="localhost",
+        user="sa",
+        password="ABCDEFGH",
+        database="pdfextractdatabase"
+    )
         # Return a JSON structure containing the image URLs
         json_result = {
             "response": {
