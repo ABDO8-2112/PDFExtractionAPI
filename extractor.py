@@ -79,14 +79,14 @@ def extract_structured_content(pdf_path: str, output_base_dir: str) -> Dict[str,
     result = {
         "response": {
             "book": pdf_name,
-            "subject": "Mathematics",  # Can be parameterized
+            "subject": "Mathematics",  
             "chapters": []
         }
     }
     
     doc = fitz.open(pdf_path)
     
-    # Create a single chapter with one topic as per your example
+    # Create a single chapter with one topic 
     chapter = {
         "chapterName": "Chapter 1",  # Will extract actual name if possible
         "topics": [],
@@ -106,7 +106,7 @@ def extract_structured_content(pdf_path: str, output_base_dir: str) -> Dict[str,
         page = doc.load_page(page_num)        
         text = page.get_text("text")
         
-        # Create a section for each page (simple approach)
+        # Create a section 
         section = {
             "sectionName": f"Page {page_num + 1}",
             "content": text.strip(),
